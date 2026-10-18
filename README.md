@@ -22,9 +22,7 @@ Arrays use numeric NPZ format, loaded without pickle. `group[N]` identifies inde
 
 `demo` generates synthetic inputs for this tensor interface; application-specific results require acquired data.
 
-Paired image folders with matching filenames can be packed with:
-
-Omit `--mask` for RGB reconstruction targets. Add additional required arrays according to the schema above before splitting.
+For paired folders with matching filenames, replace the `demo` command below with `posteriorrestore pack --images data/degraded --targets data/clean --output data/example.npz --size 64`. Set `group` to actual source-image or patient/sequence IDs and supply the declared `split` codes before `prepare` when using grouped or external target data.
 
 ```bash
 posteriorrestore demo --output data/example.npz --count 96 --config config.json --seed 13
@@ -60,4 +58,4 @@ posteriorrestore train --input data/prepared --config config.json --output runs/
 
 Keep `config.json` with the run; it contains model/data settings and the seed where the CLI does not expose one. Use separate output directories for different seeds/conditions.
 
-Source inspection: Python 3.13.5, numpy 2.1.3, scipy 1.15.3, torch 2.7.1+cu118, scikit-learn 1.6.1, matplotlib 3.10.0 (installed versions inspected). Checks covered Python syntax, configuration parsing and CLI arguments. No training, full evaluation or CI was run in this update.
+Source inspection: Python 3.13.5, numpy 2.1.3, scipy 1.15.3, torch 2.7.1+cu118, scikit-learn 1.6.1, matplotlib 3.10.0 (installed versions inspected). Checks covered Python syntax, configuration parsing and CLI arguments. No training or full evaluation was run. The GitHub Actions workflow checks source syntax and package installation.
