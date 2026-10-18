@@ -178,6 +178,8 @@ def main():
             unit = [score[data["group"] == group].max() for group in np.unique(data["group"])]
             rank = int(np.ceil((len(unit)+1)*.9))
             state["interval_expansion"] = float(np.sort(unit)[rank-1]) if rank <= len(unit) else float("inf")
+            if hasattr(network, "calibration_mode"):
+                state["calibration_mode"] = network.calibration_mode
         torch.save(state, out)
     elif args.command == "evaluate":
         state = torch.load(args.model, map_location=args.device, weights_only=True)
@@ -196,13 +198,18 @@ def main():
             if "classification_temperature" in state and "probability" in prediction:
                 prediction["probability"] = (prediction["probability"].clamp_min(1e-10).log() / state["classification_temperature"]).softmax(-1)
             if "interval_expansion" in state:
-                lower = prediction.get("lower", prediction.get("prediction"))
-                upper = prediction.get("upper", prediction.get("prediction"))
-                prediction["lower"] = lower-state["interval_expansion"]
-                prediction["upper"] = upper+state["interval_expansion"]
-                if "bound_lower" in prediction:
-                    prediction["lower"] = torch.maximum(prediction["lower"], prediction["bound_lower"])
-                    prediction["upper"] = torch.minimum(prediction["upper"], prediction["bound_upper"])
+                if hasattr(network, "apply_calibration"):
+                    if state.get("calibration_mode") != network.calibration_mode:
+                        raise ValueError("Recalibrate this checkpoint with the operator-null sample scale")
+                    prediction = network.apply_calibration(prediction, state["interval_expansion"])
+                else:
+                    lower = prediction.get("lower", prediction.get("prediction"))
+                    upper = prediction.get("upper", prediction.get("prediction"))
+                    prediction["lower"] = lower-state["interval_expansion"]
+                    prediction["upper"] = upper+state["interval_expansion"]
+                    if "bound_lower" in prediction:
+                        prediction["lower"] = torch.maximum(prediction["lower"], prediction["bound_lower"])
+                        prediction["upper"] = torch.minimum(prediction["upper"], prediction["bound_upper"])
             if args.device.startswith("cuda"):
                 torch.cuda.synchronize()
             elapsed.append((time.perf_counter() - start) / len(indices))

@@ -53,7 +53,7 @@ For interval or classification confidence calibration, use independent groups ex
 posteriorrestore calibrate --input data/prepared/calibration.npz --model runs/full/model.pt --output runs/full/calibrated.pt
 ```
 
-Evaluate `calibrated.pt` with the same evaluation command. Classification uses temperature scaling; numeric intervals use a 90% group-maximum split-calibration expansion. Insufficient independent units retain infinite intervals. Pretraining checkpoints can initialize supervised training with `train --init path/to/model.pt`.
+Evaluate `calibrated.pt` with the same evaluation command. This model uses the 90% group-maximum null-sample scale described below. Insufficient independent units or zero posterior support for nonzero null residuals reject a finite calibrated interval. Pretraining checkpoints can initialize supervised training with `train --init path/to/model.pt`.
 
 ## Baselines and ablations
 
@@ -83,4 +83,21 @@ LPIPS uses the [published perceptual metric implementation](https://github.com/r
 
 ## Reproduction logic conventions
 
-Held-out calibration scores project reference residuals into each candidate operator null space before posterior marginalization and group-maximum quantile calibration. Observable/range residuals do not inflate this calibration expansion. Exports separate within-operator null variance, between-operator variance and measured within-operator range leakage; remeasurement error remains separate. The finite Gaussian/Fourier operator library and deterministic sampling convention define the supported deblurring setting.
+Held-out calibration scores project reference residuals into each candidate operator null space before posterior marginalization and group-maximum quantile calibration. Observable/range residuals do not inflate the null-sample calibration scale. Exports separate within-operator null variance, between-operator variance and measured within-operator range leakage; remeasurement error remains separate. The finite Gaussian/Fourier operator library and deterministic sampling convention define the supported deblurring setting.
+
+The selected calibration setting preserves the sample-level null-space constraint:
+the score is the maximum spatial ratio of operator-weighted absolute projected
+null residual to `1.645 * sqrt(null_variance)`. An independent group contributes
+its maximum score. The finite-sample 90% quantile, clamped below at one, multiplies
+all centered null samples by one global scalar. The model then recomputes null
+variance and spatial intervals from the calibrated samples plus the unchanged
+operator variance. Observable sample projections, operator-conditioned means,
+and between-operator variance stay fixed. This is an explicit reasonable scale
+calibration setting; the paper also describes spatial interval expansion. Pixel
+interval endpoints do not themselves define an operator-consistent image sample.
+
+Checkpoints record `calibration_mode: null_sample_scale`; earlier calibrated
+checkpoints must be recalibrated to avoid interpreting an additive residual as a
+scale. A nonzero null residual with zero null variance gives an infinite score,
+and inference rejects a finite guarantee in that case. Exported
+`operator_samples` and `operator_observable` permit direct projection checks.
