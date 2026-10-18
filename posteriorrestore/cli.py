@@ -163,14 +163,18 @@ def main():
             result = minimize_scalar(lambda value: log_loss(data["y"], softmax(logits / np.exp(value), axis=1), labels=np.arange(logits.shape[1])), bounds=(-3, 3), method="bounded")
             state["classification_temperature"] = float(np.exp(result.x))
         else:
-            if "lower" in prediction:
-                lower, upper = prediction["lower"], prediction["upper"]
-            elif "prediction" in prediction:
-                lower = upper = prediction["prediction"]
+            if hasattr(network, "calibration_scores"):
+                batch = tensor_batch(data, np.arange(len(data["x"])), args.device)
+                score = network.calibration_scores(batch, prediction).detach().cpu().numpy()
             else:
-                raise ValueError("Calibration needs class probabilities or numeric prediction bounds")
-            truth = torch.as_tensor(data["y"], device=lower.device)
-            score = torch.maximum(torch.maximum(lower-truth, truth-upper), torch.zeros_like(lower)).reshape(len(truth), -1).max(-1).values.detach().cpu().numpy()
+                if "lower" in prediction:
+                    lower, upper = prediction["lower"], prediction["upper"]
+                elif "prediction" in prediction:
+                    lower = upper = prediction["prediction"]
+                else:
+                    raise ValueError("Calibration needs class probabilities or numeric prediction bounds")
+                truth = torch.as_tensor(data["y"], device=lower.device)
+                score = torch.maximum(torch.maximum(lower-truth, truth-upper), torch.zeros_like(lower)).reshape(len(truth), -1).max(-1).values.detach().cpu().numpy()
             unit = [score[data["group"] == group].max() for group in np.unique(data["group"])]
             rank = int(np.ceil((len(unit)+1)*.9))
             state["interval_expansion"] = float(np.sort(unit)[rank-1]) if rank <= len(unit) else float("inf")

@@ -80,3 +80,7 @@ python -m posteriorrestore.evaluate_images --predictions runs/full/evaluation/pr
 ```
 
 LPIPS uses the [published perceptual metric implementation](https://github.com/richzhang/PerceptualSimilarity) with RGB values mapped to [-1,1]. Saliency endpoints use [PySODMetrics](https://github.com/lartpang/PySODMetrics) for adaptive/maximum F-measure, E-measure, S-measure, and weighted F-measure; their threshold conventions remain those of the metric package.
+
+## Reproduction logic conventions
+
+Held-out calibration scores project reference residuals into each candidate operator null space before posterior marginalization and group-maximum quantile calibration. Observable/range residuals do not inflate this calibration expansion. Exports separate within-operator null variance, between-operator variance and measured within-operator range leakage; remeasurement error remains separate. The finite Gaussian/Fourier operator library and deterministic sampling convention define the supported deblurring setting.

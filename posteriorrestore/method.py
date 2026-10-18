@@ -21,7 +21,7 @@ class Model(nn.Module):
         height,width=x.shape[-2:]
         fy=torch.fft.fftfreq(height,device=x.device)[:,None]
         fx=torch.fft.fftfreq(width,device=x.device)[None]
-        means=[];variances=[]; residual=[]
+        means=[];variances=[];range_variances=[]; residual=[]
         for sigma in self.c.get('sigma',[.7,1.2,2.]):
             transfer=torch.exp(-2*math.pi**2*sigma**2*(fy**2+fx**2))
             observable=(transfer>=self.c.get('threshold',.08)).float()
@@ -37,15 +37,37 @@ class Model(nn.Module):
                 samples.append(base+null)
             stack=torch.stack(samples,1)
             mean=stack.mean(1);means.append(mean);variances.append(stack.var(1,unbiased=False))
+            range_delta=torch.fft.ifft2(torch.fft.fft2(stack-mean[:,None])*observable).real
+            range_variances.append(range_delta.square().mean(1))
             residual.append(torch.fft.ifft2(torch.fft.fft2(mean)*transfer).real)
         means=torch.stack(means,1); within=torch.stack(variances,1)
         if self.c['variant']=='point_operator': weights=F.one_hot(weights.argmax(-1),weights.shape[-1]).float()
         mean=(means*weights[:,:,None,None,None]).sum(1)
-        variance=(weights[:,:,None,None,None]*(within+(means-mean[:,None]).square())).sum(1)
+        null_variance=(weights[:,:,None,None,None]*within).sum(1)
+        operator_variance=(weights[:,:,None,None,None]*(means-mean[:,None]).square()).sum(1)
+        range_variance=(weights[:,:,None,None,None]*torch.stack(range_variances,1)).sum(1)
+        variance=null_variance+operator_variance
         if self.c['variant']=='baseline': mean=self.prior(h);variance=torch.zeros_like(mean)
         radius=1.645*(variance+1e-6).sqrt()
         return {'prediction':mean,'lower':mean-radius,'upper':mean+radius,'variance':variance,
-                'operator_probability':weights,'remeasurement':(torch.stack(residual,1)*weights[:,:,None,None,None]).sum(1)}
+                'null_variance':null_variance,'operator_variance':operator_variance,'range_variance':range_variance,
+                'operator_means':means,'operator_probability':weights,'remeasurement':(torch.stack(residual,1)*weights[:,:,None,None,None]).sum(1)}
+
+
+    def calibration_scores(self,b,p):
+        """Return operator-marginalized null residuals without range-error inflation."""
+        truth=b['y'].float();height,width=truth.shape[-2:]
+        fy=torch.fft.fftfreq(height,device=truth.device)[:,None]
+        fx=torch.fft.fftfreq(width,device=truth.device)[None]
+        residuals=[]
+        for index,sigma in enumerate(self.c.get('sigma',[.7,1.2,2.])):
+            transfer=torch.exp(-2*math.pi**2*sigma**2*(fy**2+fx**2))
+            observable=(transfer>=self.c.get('threshold',.08)).float()
+            if self.c['variant']=='no_projection':observable=torch.zeros_like(observable)
+            residual=truth-p['operator_means'][:,index]
+            residuals.append(torch.fft.ifft2(torch.fft.fft2(residual)*(1-observable)).real.abs())
+        marginalized=(torch.stack(residuals,1)*p['operator_probability'][:,:,None,None,None]).sum(1)
+        return marginalized.flatten(1).amax(1)
 
     def objective(self,b,p):
         entropy=-(p['operator_probability']*(p['operator_probability']+1e-8).log()).sum(-1).mean()
@@ -62,4 +84,5 @@ def demo(seed,n,c):
 def measure(p,d,c):
     import numpy as np
     return {'range_violation':float(np.mean((p['remeasurement']-d['x'])**2)),
-            'posterior_variance':float(p['variance'].mean())}
+            'posterior_variance':float(p['variance'].mean()),'null_variance':float(p['null_variance'].mean()),
+            'operator_variance':float(p['operator_variance'].mean()),'range_variance':float(p['range_variance'].mean())}
