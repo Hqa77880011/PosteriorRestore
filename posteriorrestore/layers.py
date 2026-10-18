@@ -38,9 +38,9 @@ def warp(x, flow):
     return F.grid_sample(x, grid + displacement, mode="bilinear", padding_mode="border", align_corners=True)
 
 
-def image_demo(seed, n, channels=3, mask=True):
+def image_demo(seed, n, channels=3, mask=True, size=32):
     rng = np.random.default_rng(seed)
-    x = rng.uniform(0, 1, (n, channels, 32, 32)).astype("float32")
+    x = rng.uniform(0, 1, (n, channels, size, size)).astype("float32")
     y = (x[:, :1] > .5).astype("float32") if mask else x.copy()
     return {"x": x, "y": y, "group": np.arange(n)}
 

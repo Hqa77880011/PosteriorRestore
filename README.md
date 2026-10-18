@@ -101,3 +101,26 @@ checkpoints must be recalibrated to avoid interpreting an additive residual as a
 scale. A nonzero null residual with zero null variance gives an infinite score,
 and inference rejects a finite guarantee in that case. Exported
 `operator_samples` and `operator_observable` permit direct projection checks.
+
+## Selected finite restoration setting
+
+`config.json` fixes RGB 64-by-64 images, width 32, Gaussian sigmas 0.7/1.2/2.0,
+six deterministic conditional samples, periodic Fourier boundaries and observable
+threshold 0.08. Train on paired images degraded by this declared operator family;
+the existing demo generates a finite Gaussian-blur problem without external
+weights. Use independent source-image groups for fitting, validation, calibration
+and test. The group-max null_sample_scale calibration described above is the
+selected uncertainty protocol; different blind-SR or spatial-operator families
+are outside this chosen experiment definition and are not missing code.
+
+```bash
+posteriorrestore demo --output data/example.npz --config config.json --count 96
+posteriorrestore prepare --input data/example.npz --output data/prepared
+posteriorrestore train --input data/prepared --config config.json --output runs/fourier --variant full --epochs 100 --seed 13
+posteriorrestore calibrate --input data/prepared/calibration.npz --model runs/fourier/model.pt --output runs/fourier/calibrated.pt
+posteriorrestore evaluate --input data/prepared/test.npz --model runs/fourier/calibrated.pt --output runs/fourier/evaluation
+```
+
+At least nine independent calibration groups and nonzero supported null variation
+are required for a finite 90% scale. Real paired clean/degraded images are an
+optional replacement for the supplied generated image setting.

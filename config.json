@@ -6,5 +6,10 @@
     2.0
   ],
   "samples": 6,
-  "threshold": 0.08
+  "threshold": 0.08,
+  "input_shape": [
+    3,
+    64,
+    64
+  ]
 }

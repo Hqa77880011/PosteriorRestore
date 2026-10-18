@@ -104,8 +104,15 @@ class Model(nn.Module):
 
 
 def demo(seed,n,c):
-    from scipy.ndimage import gaussian_filter
-    d=image_demo(seed,n,mask=False);d['x']=gaussian_filter(d['y'],(0,0,1.2,1.2));return d
+    import numpy as np
+    d=image_demo(seed,n,mask=False,size=c.get('input_shape',[3,64,64])[-1])
+    height,width=d['y'].shape[-2:]
+    fy=np.fft.fftfreq(height)[:,None];fx=np.fft.fftfreq(width)[None]
+    sigma=np.random.default_rng(seed+1).choice(c.get('sigma',[.7,1.2,2.]),n)
+    transfer=np.exp(-2*np.pi**2*sigma[:,None,None]**2*(fy**2+fx**2))
+    d['x']=np.fft.ifft2(np.fft.fft2(d['y'])*transfer[:,None]).real.astype('float32')
+    d['operator_sigma']=sigma.astype('float32')
+    return d
 
 
 def measure(p,d,c):
